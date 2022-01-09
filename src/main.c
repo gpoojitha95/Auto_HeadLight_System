@@ -28,10 +28,12 @@
 #include "definitions.h"                // SYS function prototypes
 #include <math.h>
 #include "MPU6050_res_define.h"
+#include "mpu_6050_i2c.h"
+#include "i2c_mpu.h"
 
 #define PI 3.14159265
 #define degToRad(angleInDegrees) ((angleInDegrees) * M_PI / 180.0)
-#define SYS_FREQ 200000000                          // Define SYS CLK Frequency
+
 #define SWITCH_PRESSED_STATE                    0   // Active LOW switch
 // *****************************************************************************
 // *****************************************************************************
@@ -41,20 +43,7 @@
 static bool HL_SW = 0;
 static bool HL_AUTO = 0;
 
-void delay_us(unsigned int us)
-{
-    // Convert microseconds us into how many clock ticks it will take
-    us *= (SYS_FREQ / 1000000) / 2; // Core Timer updates every 2 ticks
-                      
-    _CP0_SET_COUNT(0); // Set Core Timer count to 0
 
-    while (us > _CP0_GET_COUNT()); // Wait until Core Timer count reaches the number we calculated earlier
-}
-
-void delay_ms(int ms)
-{
-    delay_us(ms * 1000);
-}
 
 void PWM_init(void)
 {
@@ -69,179 +58,7 @@ void PWM_init(void)
     HL_AUTO =0;
 }
 
-void I2C_wait_for_idle(void)
-{
-    while(I2C1CON & 0x1F); // Acknowledge sequence not in progress
-                                // Receive sequence not in progress
-                                // Stop condition not in progress
-                                // Repeated Start condition not in progress
-                                // Start condition not in progress
-    while(I2C1STATbits.TRSTAT); // Bit = 0 ? Master transmit is not in progress
-}
 
-// I2C_start() sends a start condition  
-void I2C_start()
-{
-    I2C_wait_for_idle();
-    I2C1CONbits.SEN = 1;
-    while (I2C1CONbits.SEN == 1);
-}
-
-// I2C_stop() sends a stop condition  
-void I2C_stop()
-{
-    I2C_wait_for_idle();
-    I2C1CONbits.PEN = 1;
-}
-
-// I2C_restart() sends a repeated start/restart condition
-void I2C_restart()
-{
-    I2C_wait_for_idle();
-    I2C1CONbits.RSEN = 1;
-    while (I2C1CONbits.RSEN == 1);
-}
-// I2C_ack() sends an ACK condition
-
-void I2C_ack(void)
-{
-    I2C_wait_for_idle();
-    I2C1CONbits.ACKDT = 0; // Set hardware to send ACK bit
-    I2C1CONbits.ACKEN = 1; // Send ACK bit, will be automatically cleared by hardware when sent  
-    while(I2C1CONbits.ACKEN); // Wait until ACKEN bit is cleared, meaning ACK bit has been sent
-}
-
-// I2C_nack() sends a NACK condition
-void I2C_nack(void) // Acknowledge Data bit
-{
-    I2C_wait_for_idle();
-    I2C1CONbits.ACKDT = 1; // Set hardware to send NACK bit
-    I2C1CONbits.ACKEN = 1; // Send NACK bit, will be automatically cleared by hardware when sent  
-    while(I2C1CONbits.ACKEN); // Wait until ACKEN bit is cleared, meaning NACK bit has been sent
-}
-
-// address is I2C slave address, set wait_ack to 1 to wait for ACK bit or anything else to skip ACK checking  
-void I2C_write(unsigned char address, char wait_ack)
-{
-    I2C1TRN = address;				// Send slave address with Read/Write bit cleared
-    while (I2C1STATbits.TBF == 1);		// Wait until transmit buffer is empty
-    I2C_wait_for_idle();				// Wait until I2C bus is idle
-    if (wait_ack)                       // Wait until ACK is received  
-    {
-        while (I2C1STATbits.ACKSTAT == 1)
-        {
-         ;   
-        }
-        
-    } 
-}
-
-// value is the value of the data we want to send, set ack_nack to 0 to send an ACK or anything else to send a NACK  
-char I2C_read(unsigned char *value, char ack_nack)
-{
-    char buffer;
-    I2C1CONbits.RCEN = 1;				// Receive enable
-    while (I2C1CONbits.RCEN);			// Wait until RCEN is cleared (automatic)  
-    while (!I2C1STATbits.RBF);    		// Wait until Receive Buffer is Full (RBF flag)  
-    *value = I2C1RCV;    				// Retrieve value from I2C1RCV
-    buffer = I2C1RCV;
-    if (!ack_nack)						// Do we need to send an ACK or a NACK?  
-        I2C_ack();						// Send ACK  
-    else
-        I2C_nack();						// Send NACK 
-    return buffer;
-}
-
-char I2C22_read(char ack_nack)
-{
-    char buffer;
-    I2C1CONbits.RCEN = 1;				// Receive enable
-    while (I2C1CONbits.RCEN);			// Wait until RCEN is cleared (automatic)  
-    while (!I2C1STATbits.RBF);    		// Wait until Receive Buffer is Full (RBF flag)  
-    //*value = I2C1RCV;    				// Retrieve value from I2C1RCV
-    buffer = I2C1RCV;
-    if (!ack_nack)						// Do we need to send an ACK or a NACK?  
-        I2C_ack();						// Send ACK  
-    else
-        I2C_nack();						// Send NACK 
-    return buffer;
-}
-
-void MPU6050_Init()		/* Gyro initialization function */
-{
-	delay_ms(150);		/* Power up time >100ms */
-    I2C_start();
-	I2C_write(0xD0,1);	/* Start with device write address */
-	I2C_write(SMPLRT_DIV,1);	/* Write to sample rate register */
-	I2C_write(0x07,1);	/* 1KHz sample rate */
-	I2C_stop();
-
-	I2C_start();
-    I2C_write(0xD0,1);
-	I2C_write(PWR_MGMT_1,1);	/* Write to power management register */
-	I2C_write(0x01,1);	/* X axis gyroscope reference frequency */
-	I2C_stop();
-
-	I2C_start();
-    I2C_write(0xD0,1);
-	I2C_write(CONFIG,1);	/* Write to Configuration register */
-	I2C_write(0x00,1);	/* Fs = 8KHz */
-	I2C_stop();
-
-	I2C_start();
-    I2C_write(0xD0,1);
-	I2C_write(GYRO_CONFIG,1);	/* Write to Gyro configuration register */
-	I2C_write(0x18,1);	/* Full scale range +/- 2000 degree/C */
-	I2C_stop();
-
-	I2C_start();
-    I2C_write(0xD0,1);
-	I2C_write(INT_ENABLE,1);	/* Write to interrupt enable register */
-	I2C_write(0x01,1);
-	I2C_stop();
-}
-
-void MPU_Start_Loc(unsigned char *value)
-
-{
-    //unsigned char value;
-    I2C_start();
-	I2C_write(0xD0,1);	/* I2C start with device write address */
-	I2C_write(ACCEL_XOUT_H,1);/* Write start location address to read */ 
-    I2C_restart();	
-	I2C_write(0xD1,1);/* I2C start with device read address */
-    I2C_read(value, 1);
-    I2C_stop();
-}
-
-void MPU6050_read()
-{
-    //char buff;
-    unsigned char reg_address = GYRO_XOUT_H;   // address for Gyro X register
-    I2C_start();						/* Send start condition */  
-    I2C_write(0XD0, 1);	/* Send MPU9250's address, read/write bit not set (AD + R) */  
-    I2C_write(reg_address, 1);			/* Send the register address (RA) */  
-    I2C_restart();						/* Send repeated start condition */  
-    I2C_write(0xD1, 1);	/* Send MPU9250's address, read/write bit set (AD + W) */  
-    //buff = I2C_read(value, 1);					/* Read value from the I2C bus */  
-    //I2C_stop();  
-    //return buff;    /* Send stop condition */  
-}
-
-// I2C_init() initialises I2C1 at at frequency of [frequency]Hz
-void I2C_init(double frequency)
-{
-    double BRG;
-    
-    I2C1CON = 0;			// Turn off I2C1 module
-    I2C1CONbits.DISSLW = 1; // Disable slew rate for 100kHz
-    
-    BRG = (1 / (2 * frequency)) - 0.000000104;
-    BRG *= (SYS_FREQ / 2) - 2;    
-
-    I2C1BRG = (int)BRG;		// Set baud rate
-    I2C1CONbits.ON = 1;		// Turn on I2C1 module
-}
 
 static void SW1_User_Handler(GPIO_PIN pin, uintptr_t context)
 {
