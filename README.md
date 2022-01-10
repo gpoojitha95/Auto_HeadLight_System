@@ -26,7 +26,7 @@ Detects the intensity of the light and accordingly allows the flow of voltage.
 3. Actuators - Stepper Motor 
 Two **SG90** stepper motors were used. one for vertical movement and the other for 
 horizontal movement.
-4. **Potentiometer** 
+4. Potentiometer 
 Used as a steer to indicate the direction of the vehicle.ECE 5731 Embedded Computing in Mechatronics Fall 2021
 7
 Final Project Report
@@ -54,6 +54,6 @@ microcontrollers.
 4. [PIC32MZ series I2C Tutorial](https://www.aidanmocke.com/blog/2018/11/27/i2c/)
 5. [PIC32MZ series PWM tutorial](https://www.aidanmocke.com/blog/2018/11/16/pwm/)
 
-Please feel to contact me on geethapoojithan@oakland.edu for any questions/concerns.
+Please feel to contact me on my email geethapoojithan@oakland.edu for any questions/concerns.
 
 
